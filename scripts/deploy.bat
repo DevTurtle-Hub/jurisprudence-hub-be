@@ -11,15 +11,24 @@ set ENV_FILE=.env.production
 if not exist "%ENV_FILE%" (
     if exist ".env" (
         set ENV_FILE=.env
+    ) else if exist ".env.production.example" (
+        echo [THONG BAO] Tu dong tao .env.production tu .env.production.example...
+        copy .env.production.example .env.production >nul
+        set ENV_FILE=.env.production
     ) else (
         echo [CANH BAO] Khong tim thay file .env.production hoac .env!
     )
 )
 
+set ENV_ARG=
+if exist "%ENV_FILE%" (
+    set ENV_ARG=--env-file %ENV_FILE%
+)
+
 echo ==============================================================
 echo [1/2] Khoi chay Database va Backend services...
 echo ==============================================================
-docker compose -f %COMPOSE_FILE% up -d --remove-orphans
+docker compose %ENV_ARG% -f %COMPOSE_FILE% up -d --remove-orphans
 
 if %ERRORLEVEL% NEQ 0 (
     echo [LOI] Khong the start cac container!

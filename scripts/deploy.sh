@@ -20,8 +20,19 @@ echo "==========================================================================
 
 # 1. Kiem tra file cau hinh moi truong
 if [ ! -f "${ENV_FILE}" ] && [ ! -f ".env" ]; then
-    echo "[CANH BAO] Khong tim thay file ${ENV_FILE} hoac .env!"
-    echo "Dang su dung cac bien moi truong he thong hien co..."
+    if [ -f ".env.production.example" ]; then
+        echo "[THONG BAO] Chua co file ${ENV_FILE}, tu dong khoi tao tu .env.production.example..."
+        cp .env.production.example "${ENV_FILE}"
+    else
+        echo "[CANH BAO] Khong tim thay file ${ENV_FILE} hoac .env!"
+    fi
+fi
+
+ENV_ARG=""
+if [ -f "${ENV_FILE}" ]; then
+    ENV_ARG="--env-file ${ENV_FILE}"
+elif [ -f ".env" ]; then
+    ENV_ARG="--env-file .env"
 fi
 
 # 2. Pull image moi nhat neu dung image tu remote registry (tuy chon)
@@ -32,7 +43,7 @@ fi
 
 # 3. Trien khai cac container qua Docker Compose
 echo "[Buoc 2/3] Khoi chay Database va Backend services..."
-docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
+docker compose ${ENV_ARG} -f "${COMPOSE_FILE}" up -d --remove-orphans
 
 # 4. Kiem tra Healthcheck
 echo "[Buoc 3/3] Kiem tra ket noi va do on dinh ung dung..."
