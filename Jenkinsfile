@@ -31,8 +31,8 @@ pipeline {
         )
         string(
             name: 'APP_PORT',
-            defaultValue: '8080',
-            description: 'Cổng ứng dụng Backend trên Host'
+            defaultValue: '8081',
+            description: 'Cổng ứng dụng Backend trên Host (Mặc định 8081 để tránh đụng độ 8080 của IntelliJ)'
         )
     }
 
