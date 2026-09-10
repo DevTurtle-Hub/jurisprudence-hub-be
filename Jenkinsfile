@@ -26,8 +26,8 @@ pipeline {
         )
         string(
             name: 'DOCKER_REGISTRY',
-            defaultValue: '',
-            description: 'Tên tài khoản hoặc địa chỉ Registry (Ví dụ: yourusername hoặc registry.yourdomain.com)'
+            defaultValue: 'nguyenvanquy05',
+            description: 'Tên tài khoản hoặc địa chỉ Registry (Ví dụ: nguyenvanquy05)'
         )
         string(
             name: 'APP_PORT',
