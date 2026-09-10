@@ -1,0 +1,28 @@
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    container_name: jurisprudence-jenkins
+    restart: unless-stopped
+    user: root
+    ports:
+      - "8088:8080"
+      - "50000:50000"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - JAVA_OPTS=-Duser.timezone=Asia/Ho_Chi_Minh
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jurisprudence-network
+
+volumes:
+  jenkins_home:
+    name: jurisprudence_jenkins_data
+
+networks:
+  jurisprudence-network:
+    name: jurisprudence_network
+    driver: bridge

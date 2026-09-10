@@ -1,0 +1,22 @@
+# Default generated files
+shelf/
+/workspace.xml
+/tasks.xml
+/usage.statistics.xml
+/dictionaries
+/inspectionProfiles
+# User-specific files
+.idea/caches/
+.idea/libraries/
+.idea/shelf/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/inspectionProfiles
+.idea/jarRepositories.xml
+# Generated files
+.idea/compiler.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml

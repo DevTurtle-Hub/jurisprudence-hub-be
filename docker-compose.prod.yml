@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: jurisprudence-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jurisprudence_hub}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${POSTGRES_DB:-jurisprudence_hub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - jurisprudence-network
+
+  backend:
+    image: ${DOCKER_IMAGE:-jurisprudence-backend}:${BUILD_TAG:-latest}
+    container_name: jurisprudence-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: 8080
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jurisprudence_hub}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      EXAM_HMAC_SECRET: ${EXAM_HMAC_SECRET:?EXAM_HMAC_SECRET is required}
+      APP_ADMIN_ENABLED: ${APP_ADMIN_ENABLED:-false}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@gmail.com}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-}
+      APP_ADMIN_NAME: ${APP_ADMIN_NAME:-Quản Trị Viên}
+      APP_ADMIN_UNIT: ${APP_ADMIN_UNIT:-Cục Đào tạo}
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
+      FLYWAY_CLEAN_DISABLED: ${FLYWAY_CLEAN_DISABLED:-true}
+      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx1024m}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - jurisprudence-network
+
+volumes:
+  postgres_data:
+    name: jurisprudence_postgres_prod_data
+
+networks:
+  jurisprudence-network:
+    name: jurisprudence_network
+    driver: bridge
