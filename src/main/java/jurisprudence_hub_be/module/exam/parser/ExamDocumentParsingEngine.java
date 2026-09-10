@@ -108,6 +108,25 @@ public class ExamDocumentParsingEngine {
             "(?imu)^\\s*(?:(?:Câu|CÂU|câu)\\s+(\\d+)|Tình\\s+huống\\s+(\\d+)|Bài\\s+tập\\s+(\\d+)|Câu\\s+hỏi\\s+(\\d+))\\s*(?:\\([^)]*\\)|\\[[^\\]]*\\])?\\s*[.:\\-\\)]?\\s*([\\s\\S]*?)(?=\\s*[A-F][.:\\-\\)]|$)"
     );
 
+    // Pre-compiled regex patterns để tối đa hóa throughput và loại bỏ áp lực GC khi parse
+    private static final Pattern NUMERIC_VALUE_LINE_PATTERN = Pattern.compile("^(?:\\(?\\d+(?:[.,]\\d+)?\\)?|\\d{1,4})$");
+    private static final Pattern OPTION_LINE_START_PATTERN = Pattern.compile("(?i)^\\*?\\s*(?:\\[[A-F]\\]|\\(?[A-F][.:\\-\\)])\\s*.*");
+    private static final Pattern PAGE_NUMBER_ALONE_PATTERN = Pattern.compile("^\\d{1,3}$");
+    private static final Pattern FOOTER_END_MARKER_PATTERN = Pattern.compile("(?iu)^[\\-=_*~\\s]*HẾT[\\-=_*~\\s]*$");
+    private static final Pattern FOOTER_PROCTOR_NOTICE_PATTERN = Pattern.compile("(?iu)^.*cán\\s*bộ\\s*(?:coi|chấm)\\s*thi\\s*không\\s*giải\\s*thích\\s*gì\\s*thêm.*$");
+    private static final Pattern FOOTER_MATERIAL_NOTICE_PATTERN = Pattern.compile("(?iu)^.*thí\\s*sinh\\s*không\\s*(?:được)?\\s*sử\\s*dụng\\s*tài\\s*liệu.*$");
+    private static final Pattern FOOTER_PAGE_NUM_PATTERN = Pattern.compile("(?iu)^.*Trang\\s*\\d+(?:\\s*\\/\\s*\\d+)?.*$");
+    private static final Pattern FOOTER_EXAM_CODE_PATTERN = Pattern.compile("(?iu)^.*Mã\\s*(?:bài|đề)\\s*thi\\s*[:\\s]*[A-Z0-9_\\-]+.*$");
+    private static final Pattern FOOTER_PROCTOR_SIGN_PATTERN = Pattern.compile("(?iu)^.*(?:Giám\\s*thị|Chữ\\s*ký\\s*giám\\s*thị).*$");
+    private static final Pattern SITUATIONAL_LEAD_IN_PATTERN = Pattern.compile("(?iu)^\\(?\\s*(?:Từ|Áp\\s*dụng|Dùng|Trả\\s*lời|Đọc).*\\)?[:;.]?$");
+    private static final Pattern NUMBERED_ASSERTION_START_PATTERN = Pattern.compile("^(?:\\(?\\d+[).:]|\\([a-zA-Z]\\)|(?:I|II|III|IV|V|VI|VII|VIII|IX|X)[).:])\\s*.*");
+    private static final Pattern BULLET_POINT_PATTERN = Pattern.compile("^[•\\-\\*+]\\s+.*");
+    private static final Pattern LEADING_QUESTION_PROMPT_PATTERN = Pattern.compile("(?iu)^(?:Có\\s+bao\\s+nhiêu|Hỏi[:\\s]|Nhận\\s+định\\s+nào|Khẳng\\s+định\\s+nào|Phát\\s+biểu\\s+nào|Trong\\s+các|Theo\\s+đó|Như\\s+vậy|Chọn\\s+câu|Hãy\\s+cho\\s+biết)\\b.*");
+    private static final Pattern OPTION_PREFIX_PATTERN = Pattern.compile("(?i)^[A-F][.:\\-\\)]\\s.*");
+    private static final Pattern TRAILING_PAGE_NUMBER_PATTERN = Pattern.compile("(?<=[?.!:;”\"'\\)])\\s+\\d{1,3}\\s*$");
+    private static final Pattern ASSERTION_PLACEHOLDER_PATTERN = Pattern.compile("\\((\\d+)\\)");
+    private static final Pattern ASSERTION_RESTORE_PATTERN = Pattern.compile("___ASSERTION_(\\d+)___");
+
     /**
      * Làm sạch các dòng rác cuối trang / cuối đề thi.
      */
@@ -117,7 +136,7 @@ public class ExamDocumentParsingEngine {
         String trimmedText = text.trim();
         // Nếu chuỗi đầu vào chỉ là một dòng duy nhất và là số hoặc nhận định ngắn (ví dụ: "1", "2", "3", "4", "15", "(1)", "100"),
         // thì đây là nội dung giá trị hợp lệ (option text, điểm số, số lượng...), KHÔNG PHẢI là số trang rác cuối trang!
-        if (!trimmedText.contains("\n") && trimmedText.matches("^(?:\\(?\\d+(?:[.,]\\d+)?\\)?|\\d{1,4})$")) {
+        if (!trimmedText.contains("\n") && NUMERIC_VALUE_LINE_PATTERN.matcher(trimmedText).matches()) {
             return trimmedText;
         }
 
@@ -134,8 +153,8 @@ public class ExamDocumentParsingEngine {
             // Chỉ loại bỏ số trang rác dính ở cuối dòng sau dấu kết thúc câu nếu dòng KHÔNG phải là phương án trắc nghiệm
             // Ví dụ "...phù hợp nhất? 24" -> "...phù hợp nhất?", nhưng "A. 3" hoặc "B. 4" phải giữ nguyên số "3", "4"
             String cleanedLine = line;
-            if (!trimmed.matches("(?i)^\\*?\\s*(?:\\[[A-F]\\]|\\(?[A-F][.:\\-\\)])\\s*.*")) {
-                cleanedLine = line.replaceAll("(?<=[?.!:;”\"'\\)])\\s+\\d{1,3}\\s*$", "");
+            if (!OPTION_LINE_START_PATTERN.matcher(trimmed).matches()) {
+                cleanedLine = TRAILING_PAGE_NUMBER_PATTERN.matcher(line).replaceAll("");
             }
             validLines.add(cleanedLine);
         }
@@ -150,14 +169,14 @@ public class ExamDocumentParsingEngine {
      * bằng cách thay thế chúng bằng placeholder
      */
     private static String protectNumberedAssertions(String text) {
-        return text.replaceAll("\\((\\d+)\\)", "___ASSERTION_$1___");
+        return ASSERTION_PLACEHOLDER_PATTERN.matcher(text).replaceAll("___ASSERTION_$1___");
     }
     
     /**
      * Khôi phục lại các số nhận định từ placeholder
      */
     private static String restoreNumberedAssertions(String text) {
-        return text.replaceAll("___ASSERTION_(\\d+)___", "($1)");
+        return ASSERTION_RESTORE_PATTERN.matcher(text).replaceAll("($1)");
     }
 
     /**
@@ -167,19 +186,19 @@ public class ExamDocumentParsingEngine {
         if (line == null || line.isBlank()) return false;
         String trimmed = line.trim();
         // Số trang đứng một mình (ví dụ: 1, 2, 23, 24, 29...)
-        if (trimmed.matches("^\\d{1,3}$")) return true;
+        if (PAGE_NUMBER_ALONE_PATTERN.matcher(trimmed).matches()) return true;
         // HẾT (ví dụ: --------------- HẾT ---------------)
-        if (trimmed.matches("(?iu)^[\\-=_*~\\s]*HẾT[\\-=_*~\\s]*$")) return true;
+        if (FOOTER_END_MARKER_PATTERN.matcher(trimmed).matches()) return true;
         // Cán bộ coi thi không giải thích gì thêm
-        if (trimmed.matches("(?iu)^.*cán\\s*bộ\\s*(?:coi|chấm)\\s*thi\\s*không\\s*giải\\s*thích\\s*gì\\s*thêm.*$")) return true;
+        if (FOOTER_PROCTOR_NOTICE_PATTERN.matcher(trimmed).matches()) return true;
         // Thí sinh không được sử dụng tài liệu
-        if (trimmed.matches("(?iu)^.*thí\\s*sinh\\s*không\\s*(?:được)?\\s*sử\\s*dụng\\s*tài\\s*liệu.*$")) return true;
+        if (FOOTER_MATERIAL_NOTICE_PATTERN.matcher(trimmed).matches()) return true;
         // Trang X/Y hoặc Trang X (ví dụ: Trang 8/8 - Mã bài thi CA4)
-        if (trimmed.matches("(?iu)^.*Trang\\s*\\d+(?:\\s*\\/\\s*\\d+)?.*$")) return true;
+        if (FOOTER_PAGE_NUM_PATTERN.matcher(trimmed).matches()) return true;
         // Mã bài thi CA4 / Mã đề thi ...
-        if (trimmed.matches("(?iu)^.*Mã\\s*(?:bài|đề)\\s*thi\\s*[:\\s]*[A-Z0-9_\\-]+.*$")) return true;
+        if (FOOTER_EXAM_CODE_PATTERN.matcher(trimmed).matches()) return true;
         // Giám thị ...
-        if (trimmed.matches("(?iu)^.*(?:Giám\\s*thị|Chữ\\s*ký\\s*giám\\s*thị).*$")) return true;
+        if (FOOTER_PROCTOR_SIGN_PATTERN.matcher(trimmed).matches()) return true;
         return false;
     }
 
@@ -616,7 +635,7 @@ public class ExamDocumentParsingEngine {
                         pendingContext = null;
                     }
 
-                    if (line.matches("(?iu)^\\(?\\s*(?:Từ|Áp\\s*dụng|Dùng|Trả\\s*lời|Đọc).*\\)?[:;.]?$")) {
+                    if (SITUATIONAL_LEAD_IN_PATTERN.matcher(line).matches()) {
                         continue;
                     }
                 }
@@ -1191,7 +1210,7 @@ public class ExamDocumentParsingEngine {
                 .replaceAll("\\s+", " ")
                 .trim();
         // Nếu nội dung phương án chỉ là một con số hợp lệ (ví dụ: 1, 2, 3, 4, 15, 100 hoặc (1)), trả về ngay
-        if (cleaned.matches("^(?:\\(?\\d+(?:[.,]\\d+)?\\)?|\\d{1,4})$")) {
+        if (NUMERIC_VALUE_LINE_PATTERN.matcher(cleaned).matches()) {
             return cleaned;
         }
         return cleanGarbageFooters(cleaned);
@@ -1200,15 +1219,15 @@ public class ExamDocumentParsingEngine {
     private static boolean shouldStartOnNewLine(String trimmed) {
         if (trimmed == null || trimmed.isEmpty()) return false;
         // Nhận định đánh số: (1), (2), 1., 1), 1:
-        if (trimmed.matches("^(?:\\(?\\d+[).:]|\\([a-zA-Z]\\)|(?:I|II|III|IV|V|VI|VII|VIII|IX|X)[).:])\\s*.*")) {
+        if (NUMBERED_ASSERTION_START_PATTERN.matcher(trimmed).matches()) {
             return true;
         }
         // Gạch đầu dòng
-        if (trimmed.matches("^[•\\-\\*+]\\s+.*")) {
+        if (BULLET_POINT_PATTERN.matcher(trimmed).matches()) {
             return true;
         }
         // Câu hỏi kết luận hoặc dẫn đề
-        if (trimmed.matches("(?iu)^(?:Có\\s+bao\\s+nhiêu|Hỏi[:\\s]|Nhận\\s+định\\s+nào|Khẳng\\s+định\\s+nào|Phát\\s+biểu\\s+nào|Trong\\s+các|Theo\\s+đó|Như\\s+vậy|Chọn\\s+câu|Hãy\\s+cho\\s+biết)\\b.*")) {
+        if (LEADING_QUESTION_PROMPT_PATTERN.matcher(trimmed).matches()) {
             return true;
         }
         return false;
@@ -1232,7 +1251,7 @@ public class ExamDocumentParsingEngine {
             if (isFooterOrHeaderGarbage(trimmed)) continue;
 
             // Kiểm tra xem dòng này có phải bắt đầu một phương án không
-            if (trimmed.matches("(?i)^[A-F][.:\\-\\)]\\s.*")) {
+            if (OPTION_PREFIX_PATTERN.matcher(trimmed).matches()) {
                 inOptions = true;
             }
 
@@ -1273,7 +1292,7 @@ public class ExamDocumentParsingEngine {
             if (isFooterOrHeaderGarbage(trimmed)) continue;
 
             // Kiểm tra xem dòng này có phải bắt đầu một phương án không
-            if (trimmed.matches("^[A-F][.:\\-\\)]\\s.*")) {
+            if (OPTION_PREFIX_PATTERN.matcher(trimmed).matches()) {
                 inOptions = true;
             }
 

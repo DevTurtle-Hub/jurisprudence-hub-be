@@ -32,7 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -76,6 +78,9 @@ public class ExamRoomServiceImpl implements ExamRoomService {
 
         // Lưu danh sách câu hỏi trắc nghiệm
         List<ExamRoomResponse.McQuestionDetail> mcDetails = new ArrayList<>();
+        List<ExamQuestionMc> mcsToSave = new ArrayList<>();
+        List<ExamQuestionMcOption> optsToSave = new ArrayList<>();
+
         if (request.getMultipleChoiceQuestions() != null) {
             int order = 1;
             for (CreateMcQuestionRequest mcReq : request.getMultipleChoiceQuestions()) {
@@ -96,7 +101,7 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         .legalReference(mcReq.getLegalReference())
                         .build();
 
-                ExamQuestionMc savedMc = examQuestionMcRepository.save(mc);
+                mcsToSave.add(mc);
 
                 List<ExamRoomResponse.McOptionDetail> optDetails = new ArrayList<>();
                 if (mcReq.getOptions() != null) {
@@ -104,11 +109,11 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         String optId = "opt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
                         ExamQuestionMcOption opt = ExamQuestionMcOption.builder()
                                 .id(optId)
-                                .question(savedMc)
+                                .question(mc)
                                 .label(optReq.getLabel() != null ? optReq.getLabel().toUpperCase() : "A")
                                 .optionText(optReq.getText())
                                 .build();
-                        examQuestionMcOptionRepository.save(opt);
+                        optsToSave.add(opt);
 
                         optDetails.add(ExamRoomResponse.McOptionDetail.builder()
                                 .id(optId)
@@ -120,20 +125,29 @@ public class ExamRoomServiceImpl implements ExamRoomService {
 
                 mcDetails.add(ExamRoomResponse.McQuestionDetail.builder()
                         .id(mcId)
-                        .order(savedMc.getOrderIndex())
-                        .question(savedMc.getQuestionText())
-                        .context(savedMc.getContext())
+                        .order(mc.getOrderIndex())
+                        .question(mc.getQuestionText())
+                        .context(mc.getContext())
                         .options(optDetails)
-                        .correctAnswer(savedMc.getCorrectAnswer())
-                        .explanation(savedMc.getExplanation())
-                        .legalReference(savedMc.getLegalReference())
+                        .correctAnswer(mc.getCorrectAnswer())
+                        .explanation(mc.getExplanation())
+                        .legalReference(mc.getLegalReference())
                         .build());
                 order++;
             }
         }
 
+        if (!mcsToSave.isEmpty()) {
+            examQuestionMcRepository.saveAll(mcsToSave);
+        }
+        if (!optsToSave.isEmpty()) {
+            examQuestionMcOptionRepository.saveAll(optsToSave);
+        }
+
         // Lưu danh sách câu hỏi tự luận
         List<ExamRoomResponse.EssayQuestionDetail> essayDetails = new ArrayList<>();
+        List<ExamQuestionEssay> essaysToSave = new ArrayList<>();
+
         if (request.getEssayQuestions() != null) {
             int order = 1;
             for (CreateEssayQuestionRequest essayReq : request.getEssayQuestions()) {
@@ -149,19 +163,23 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         .rubrics(essayReq.getRubric() != null ? essayReq.getRubric() : new ArrayList<>())
                         .build();
 
-                ExamQuestionEssay savedEssay = examQuestionEssayRepository.save(essay);
+                essaysToSave.add(essay);
 
                 essayDetails.add(ExamRoomResponse.EssayQuestionDetail.builder()
                         .id(essayId)
-                        .order(savedEssay.getOrderIndex())
-                        .title(savedEssay.getTitle())
-                        .context(savedEssay.getContext())
-                        .prompt(savedEssay.getPrompt())
-                        .maxScore(savedEssay.getMaxScore())
-                        .rubric(savedEssay.getRubrics())
+                        .order(essay.getOrderIndex())
+                        .title(essay.getTitle())
+                        .context(essay.getContext())
+                        .prompt(essay.getPrompt())
+                        .maxScore(essay.getMaxScore())
+                        .rubric(essay.getRubrics())
                         .build());
                 order++;
             }
+        }
+
+        if (!essaysToSave.isEmpty()) {
+            examQuestionEssayRepository.saveAll(essaysToSave);
         }
 
         return ExamRoomResponse.builder()
@@ -217,6 +235,8 @@ public class ExamRoomServiceImpl implements ExamRoomService {
             // Xóa các câu hỏi trắc nghiệm cũ của phòng thi
             examQuestionMcRepository.deleteByRoomId(savedRoom.getId());
 
+            List<ExamQuestionMc> mcsToSave = new ArrayList<>();
+            List<ExamQuestionMcOption> optsToSave = new ArrayList<>();
             int order = 1;
             for (CreateMcQuestionRequest mcReq : request.getMultipleChoiceQuestions()) {
                 String mcId = "mc-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
@@ -236,7 +256,7 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         .legalReference(mcReq.getLegalReference())
                         .build();
 
-                ExamQuestionMc savedMc = examQuestionMcRepository.save(mc);
+                mcsToSave.add(mc);
 
                 List<ExamRoomResponse.McOptionDetail> optDetails = new ArrayList<>();
                 if (mcReq.getOptions() != null) {
@@ -244,11 +264,11 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         String optId = "opt-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
                         ExamQuestionMcOption opt = ExamQuestionMcOption.builder()
                                 .id(optId)
-                                .question(savedMc)
+                                .question(mc)
                                 .label(optReq.getLabel() != null ? optReq.getLabel().toUpperCase() : "A")
                                 .optionText(optReq.getText())
                                 .build();
-                        examQuestionMcOptionRepository.save(opt);
+                        optsToSave.add(opt);
 
                         optDetails.add(ExamRoomResponse.McOptionDetail.builder()
                                 .id(optId)
@@ -260,15 +280,21 @@ public class ExamRoomServiceImpl implements ExamRoomService {
 
                 mcDetails.add(ExamRoomResponse.McQuestionDetail.builder()
                         .id(mcId)
-                        .order(savedMc.getOrderIndex())
-                        .question(savedMc.getQuestionText())
-                        .context(savedMc.getContext())
+                        .order(mc.getOrderIndex())
+                        .question(mc.getQuestionText())
+                        .context(mc.getContext())
                         .options(optDetails)
-                        .correctAnswer(savedMc.getCorrectAnswer())
-                        .explanation(savedMc.getExplanation())
-                        .legalReference(savedMc.getLegalReference())
+                        .correctAnswer(mc.getCorrectAnswer())
+                        .explanation(mc.getExplanation())
+                        .legalReference(mc.getLegalReference())
                         .build());
                 order++;
+            }
+            if (!mcsToSave.isEmpty()) {
+                examQuestionMcRepository.saveAll(mcsToSave);
+            }
+            if (!optsToSave.isEmpty()) {
+                examQuestionMcOptionRepository.saveAll(optsToSave);
             }
         } else {
             List<ExamQuestionMc> existingMcs = examQuestionMcRepository.findByRoomIdOrderByOrderIndexAsc(savedRoom.getId());
@@ -300,6 +326,7 @@ public class ExamRoomServiceImpl implements ExamRoomService {
             // Xóa các câu hỏi tự luận cũ của phòng thi
             examQuestionEssayRepository.deleteByRoomId(savedRoom.getId());
 
+            List<ExamQuestionEssay> essaysToSave = new ArrayList<>();
             int order = 1;
             for (CreateEssayQuestionRequest essayReq : request.getEssayQuestions()) {
                 String essayId = "essay-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
@@ -314,18 +341,21 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         .rubrics(essayReq.getRubric() != null ? essayReq.getRubric() : new ArrayList<>())
                         .build();
 
-                ExamQuestionEssay savedEssay = examQuestionEssayRepository.save(essay);
+                essaysToSave.add(essay);
 
                 essayDetails.add(ExamRoomResponse.EssayQuestionDetail.builder()
                         .id(essayId)
-                        .order(savedEssay.getOrderIndex())
-                        .title(savedEssay.getTitle())
-                        .context(savedEssay.getContext())
-                        .prompt(savedEssay.getPrompt())
-                        .maxScore(savedEssay.getMaxScore())
-                        .rubric(savedEssay.getRubrics())
+                        .order(essay.getOrderIndex())
+                        .title(essay.getTitle())
+                        .context(essay.getContext())
+                        .prompt(essay.getPrompt())
+                        .maxScore(essay.getMaxScore())
+                        .rubric(essay.getRubrics())
                         .build());
                 order++;
+            }
+            if (!essaysToSave.isEmpty()) {
+                examQuestionEssayRepository.saveAll(essaysToSave);
             }
         } else {
             List<ExamQuestionEssay> existingEssays = examQuestionEssayRepository.findByRoomIdOrderByOrderIndexAsc(savedRoom.getId());
@@ -396,9 +426,21 @@ public class ExamRoomServiceImpl implements ExamRoomService {
 
         Page<ExamRoom> roomPage = examRoomRepository.searchRooms(trimmedSearch, status, pageable);
 
-        List<ExamRoomSummaryResponse> items = roomPage.getContent().stream().map(room -> {
-            int mcCount = room.getMultipleChoiceQuestions() != null ? room.getMultipleChoiceQuestions().size() : 0;
-            int essayCount = room.getEssayQuestions() != null ? room.getEssayQuestions().size() : 0;
+        List<ExamRoom> rooms = roomPage.getContent();
+        List<String> roomIds = rooms.stream().map(ExamRoom::getId).toList();
+        Map<String, Integer> mcCountMap = new HashMap<>();
+        Map<String, Integer> essayCountMap = new HashMap<>();
+
+        if (!roomIds.isEmpty()) {
+            examQuestionMcRepository.countByRoomIdsGrouped(roomIds)
+                    .forEach(row -> mcCountMap.put((String) row[0], ((Number) row[1]).intValue()));
+            examQuestionEssayRepository.countByRoomIdsGrouped(roomIds)
+                    .forEach(row -> essayCountMap.put((String) row[0], ((Number) row[1]).intValue()));
+        }
+
+        List<ExamRoomSummaryResponse> items = rooms.stream().map(room -> {
+            int mcCount = mcCountMap.getOrDefault(room.getId(), 0);
+            int essayCount = essayCountMap.getOrDefault(room.getId(), 0);
 
             return ExamRoomSummaryResponse.builder()
                     .id(room.getId())

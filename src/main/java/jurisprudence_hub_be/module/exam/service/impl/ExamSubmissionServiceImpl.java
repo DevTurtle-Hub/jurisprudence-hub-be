@@ -193,10 +193,12 @@ public class ExamSubmissionServiceImpl implements ExamSubmissionService {
 
         ExamSubmission savedSubmission = examSubmissionRepository.save(submission);
 
-        // Gắn submission vào từng answers và lưu
+        // Gắn submission vào từng answers và lưu theo batch
         for (SubmissionAnswer ans : submissionAnswers) {
             ans.setSubmission(savedSubmission);
-            submissionAnswerRepository.save(ans);
+        }
+        if (!submissionAnswers.isEmpty()) {
+            submissionAnswerRepository.saveAll(submissionAnswers);
         }
 
         // Tăng số lượt thi của phòng
@@ -256,6 +258,7 @@ public class ExamSubmissionServiceImpl implements ExamSubmissionService {
         BigDecimal totalEssayScore = BigDecimal.ZERO;
         StringBuilder feedbackBuilder = new StringBuilder();
 
+        List<SubmissionAnswer> updatedAnswers = new ArrayList<>();
         if (request != null && request.getEssayScores() != null) {
             for (GradeEssayRequest.EssayScoreItem item : request.getEssayScores()) {
                 if (item == null || item.getQuestionId() == null) continue;
@@ -263,7 +266,7 @@ public class ExamSubmissionServiceImpl implements ExamSubmissionService {
                     if (ans != null && ans.getQuestionType() == QuestionType.ESSAY && item.getQuestionId().equals(ans.getQuestionId())) {
                         BigDecimal score = item.getScore() != null ? item.getScore() : BigDecimal.ZERO;
                         ans.setEssayScore(score);
-                        submissionAnswerRepository.save(ans);
+                        updatedAnswers.add(ans);
                         totalEssayScore = totalEssayScore.add(score);
 
                         if (item.getComment() != null && !item.getComment().isBlank()) {
@@ -273,6 +276,9 @@ public class ExamSubmissionServiceImpl implements ExamSubmissionService {
                     }
                 }
             }
+        }
+        if (!updatedAnswers.isEmpty()) {
+            submissionAnswerRepository.saveAll(updatedAnswers);
         }
 
         // Giới hạn điểm tự luận tối đa 30.0

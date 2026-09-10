@@ -99,12 +99,19 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         if (requests == null || requests.isEmpty()) {
             return Collections.emptyList();
         }
-        List<QuestionBankResponse> savedQuestions = new ArrayList<>();
+        List<QuestionBank> entities = new ArrayList<>();
         for (QuestionBankRequest request : requests) {
             if (request == null) continue;
-            savedQuestions.add(saveQuestion(request, createdBy));
+            QuestionBank qb = convertRequestToEntity(request);
+            qb.setCreatedBy(createdBy);
+            qb.setDraft(true);
+            entities.add(qb);
         }
-        return savedQuestions;
+        if (entities.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<QuestionBank> saved = questionBankRepository.saveAll(entities);
+        return saved.stream().map(this::convertEntityToResponse).toList();
     }
 
     @Override

@@ -464,6 +464,10 @@ public class ExamImportServiceImpl implements ExamImportService {
         int mcCount = 0;
         int shortAnswerCount = 0;
 
+        List<ExamQuestionMc> mcsToSave = new ArrayList<>();
+        List<ExamQuestionMcOption> optsToSave = new ArrayList<>();
+        List<ExamQuestionEssay> essaysToSave = new ArrayList<>();
+
         List<DraftQuestionDto> questions = draft.getQuestions() != null ? draft.getQuestions() : Collections.emptyList();
         for (DraftQuestionDto q : questions) {
             if (q == null) continue;
@@ -486,16 +490,16 @@ public class ExamImportServiceImpl implements ExamImportService {
                         .legalReference("Theo đề thi sát hạch chuẩn CAND")
                         .build();
 
-                ExamQuestionMc savedMc = examQuestionMcRepository.save(mc);
+                mcsToSave.add(mc);
 
                 for (DraftOptionDto opt : options) {
                     if (opt == null) continue;
                     ExamQuestionMcOption mcOpt = ExamQuestionMcOption.builder()
-                            .question(savedMc)
+                            .question(mc)
                             .label(opt.getKey() != null ? opt.getKey() : "")
                             .optionText(opt.getContent() != null ? opt.getContent() : "")
                             .build();
-                    examQuestionMcOptionRepository.save(mcOpt);
+                    optsToSave.add(mcOpt);
                 }
                 mcCount++;
             } else if (q.getType() == DraftQuestionType.ESSAY) {
@@ -510,7 +514,7 @@ public class ExamImportServiceImpl implements ExamImportService {
                         .rubrics(q.getAnswer() != null ? List.of("Đáp án mẫu: " + q.getAnswer()) : List.of())
                         .build();
 
-                examQuestionEssayRepository.save(essay);
+                essaysToSave.add(essay);
                 essayCount++;
             } else {
                 // SHORT_ANSWER ánh xạ vào bảng câu hỏi trả lời ngắn
@@ -524,9 +528,19 @@ public class ExamImportServiceImpl implements ExamImportService {
                         .rubrics(q.getAnswer() != null ? List.of("Đáp án mẫu: " + q.getAnswer()) : List.of())
                         .build();
 
-                examQuestionEssayRepository.save(essay);
+                essaysToSave.add(essay);
                 shortAnswerCount++;
             }
+        }
+
+        if (!mcsToSave.isEmpty()) {
+            examQuestionMcRepository.saveAll(mcsToSave);
+        }
+        if (!optsToSave.isEmpty()) {
+            examQuestionMcOptionRepository.saveAll(optsToSave);
+        }
+        if (!essaysToSave.isEmpty()) {
+            examQuestionEssayRepository.saveAll(essaysToSave);
         }
 
         // 4. Cập nhật trạng thái bản nháp thành CONFIRMED
