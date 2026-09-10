@@ -3,7 +3,7 @@
 # Healthcheck Script for Jurisprudence Hub Backend (Actuator)
 # ==============================================================
 
-PORT="${PORT:-8080}"
+PORT="${HOST_PORT:-${PORT:-8081}}"
 HEALTH_URL="http://localhost:${PORT}/actuator/health"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-30}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-3}"

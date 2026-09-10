@@ -19,6 +19,8 @@ echo "File Compose: ${COMPOSE_FILE}"
 echo "=============================================================================="
 
 # 1. Kiem tra file cau hinh moi truong
+export HOST_PORT="${HOST_PORT:-8081}"
+
 if [ ! -f "${ENV_FILE}" ] && [ ! -f ".env" ]; then
     if [ -f ".env.production.example" ]; then
         echo "[THONG BAO] Chua co file ${ENV_FILE}, tu dong khoi tao tu .env.production.example..."
@@ -26,6 +28,10 @@ if [ ! -f "${ENV_FILE}" ] && [ ! -f ".env" ]; then
     else
         echo "[CANH BAO] Khong tim thay file ${ENV_FILE} hoac .env!"
     fi
+fi
+
+if [ -f "${ENV_FILE}" ] && ! grep -q "HOST_PORT=" "${ENV_FILE}"; then
+    echo "HOST_PORT=${HOST_PORT}" >> "${ENV_FILE}"
 fi
 
 ENV_ARG=""

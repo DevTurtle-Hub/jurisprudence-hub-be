@@ -124,7 +124,8 @@ pipeline {
                     
                     // Kiem tra va nap file cau hinh moi truong neu co
                     sh """
-                        export PORT="${params.APP_PORT}"
+                        export HOST_PORT="${params.APP_PORT ?: '8081'}"
+                        export PORT="8080"
                         export DOCKER_IMAGE="${IMAGE_NAME}"
                         export BUILD_TAG="${BUILD_TAG}"
                         
@@ -140,7 +141,7 @@ pipeline {
                 script {
                     echo "===> Dang xac minh trang thai UP qua Spring Boot Actuator..."
                     sh """
-                        export PORT="${params.APP_PORT}"
+                        export HOST_PORT="${params.APP_PORT ?: '8081'}"
                         bash scripts/healthcheck.sh
                     """
                 }
