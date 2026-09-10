@@ -66,6 +66,7 @@ pipeline {
             }
             steps {
                 echo "===> Dang chay Maven Unit Tests..."
+                sh 'chmod +x ./mvnw'
                 sh './mvnw test -B'
             }
             post {
@@ -121,8 +122,7 @@ pipeline {
             steps {
                 script {
                     echo "===> Dang tien hanh trien khai bang Docker Compose..."
-                    
-                    // Kiem tra va nap file cau hinh moi truong neu co
+                    sh 'chmod +x scripts/*.sh'
                     sh """
                         export HOST_PORT="${params.APP_PORT ?: '8081'}"
                         export PORT="8080"
@@ -140,6 +140,7 @@ pipeline {
             steps {
                 script {
                     echo "===> Dang xac minh trang thai UP qua Spring Boot Actuator..."
+                    sh 'chmod +x scripts/*.sh'
                     sh """
                         export HOST_PORT="${params.APP_PORT ?: '8081'}"
                         bash scripts/healthcheck.sh
