@@ -45,22 +45,23 @@ public class DatabaseConfig {
     public DataSource dataSource() {
         HikariConfig config = new HikariConfig();
 
-        String jdbcUrl = rawUrl != null ? rawUrl.trim() : "";
-        String username = defaultUsername;
-        String password = defaultPassword;
+        String jdbcUrl = rawUrl != null ? rawUrl.strip() : "";
+        String username = defaultUsername != null ? defaultUsername.strip() : "";
+        String password = defaultPassword != null ? defaultPassword.strip() : "";
 
         // Nếu chuỗi kết nối nhận được từ Render / Heroku có dạng: postgres://user:password@host:port/dbname
-        if (jdbcUrl.startsWith("postgres://") || (jdbcUrl.startsWith("postgresql://") && !jdbcUrl.startsWith("jdbc:"))) {
+        // hoặc jdbc:postgresql://user:password@host:port/dbname
+        if (jdbcUrl.startsWith("postgres://") || jdbcUrl.startsWith("postgresql://") || (jdbcUrl.startsWith("jdbc:postgresql://") && jdbcUrl.contains("@"))) {
             try {
-                // Thay thế postgres:// thành http:// để java.net.URI parse userInfo, host, port chuẩn xác
-                String parseableUri = jdbcUrl.replaceFirst("^postgres(ql)?://", "http://");
+                // Thay thế tiền tố thành http:// để java.net.URI parse userInfo, host, port chuẩn xác
+                String parseableUri = jdbcUrl.replaceFirst("^(jdbc:)?postgres(ql)?://", "http://");
                 URI uri = new URI(parseableUri);
 
                 if (uri.getUserInfo() != null) {
                     String[] userParts = uri.getUserInfo().split(":", 2);
-                    username = userParts[0];
+                    username = userParts[0].strip();
                     if (userParts.length > 1) {
-                        password = userParts[1];
+                        password = userParts[1].strip();
                     }
                 }
 
@@ -78,6 +79,11 @@ public class DatabaseConfig {
             } catch (Exception e) {
                 log.warn("Khong the parse URI cloud postgres, giu nguyen URL: {}", e.getMessage());
             }
+        }
+
+        // Tự động bổ sung sslmode=require nếu kết nối tới Neon hoặc cloud Postgres
+        if (jdbcUrl.contains("neon.tech") && !jdbcUrl.contains("sslmode=")) {
+            jdbcUrl += (jdbcUrl.contains("?") ? "&" : "?") + "sslmode=require";
         }
 
         config.setJdbcUrl(jdbcUrl);
