@@ -34,10 +34,10 @@ public class DatabaseConfig {
     @Value("${spring.datasource.driver-class-name:org.postgresql.Driver}")
     private String driverClassName;
 
-    @Value("${spring.datasource.hikari.maximum-pool-size:10}")
+    @Value("${spring.datasource.hikari.maximum-pool-size:5}")
     private int maxPoolSize;
 
-    @Value("${spring.datasource.hikari.minimum-idle:2}")
+    @Value("${spring.datasource.hikari.minimum-idle:1}")
     private int minIdle;
 
     @Bean

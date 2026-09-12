@@ -24,8 +24,7 @@ COPY --from=builder /app/target/jurisprudence-hub-be-0.0.1-SNAPSHOT.jar app.jar
 ENV PORT=8080
 EXPOSE 8080
 
-# Production container JVM flags:
-# -XX:+UseContainerSupport: respects container CPU & RAM cgroups limits
-# -XX:MaxRAMPercentage=75.0: leaves 25% for OS and off-heap/native memory
-# -XX:+ExitOnOutOfMemoryError: triggers container restart immediately on OOM
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError -Dserver.port=${PORT:-8080} -jar app.jar"]
+# Production container JVM flags optimized for 512MB RAM environments (Render Free):
+# -XX:+UseSerialGC: minimizes native GC thread memory and overhead on single-core / low RAM
+# Default: 256MB max heap, 96MB metaspace, 256KB stack, leaving ~150MB buffer for OS and native memory
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=96m -Xss256k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError} -Dserver.port=${PORT:-8080} -jar app.jar"]
