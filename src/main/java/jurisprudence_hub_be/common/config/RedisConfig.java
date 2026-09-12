@@ -10,12 +10,17 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.connection.RedisConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisPassword;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
@@ -37,6 +42,31 @@ import java.util.Map;
 public class RedisConfig implements CachingConfigurer {
 
     private static final Logger log = LoggerFactory.getLogger(RedisConfig.class);
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory(
+            @Value("${REDIS_URL:}") String redisUrl,
+            @Value("${spring.data.redis.host:localhost}") String redisHost,
+            @Value("${spring.data.redis.port:6379}") int redisPort,
+            @Value("${spring.data.redis.password:}") String redisPassword
+    ) {
+        String trimmedUrl = redisUrl != null ? redisUrl.trim() : "";
+        if (!trimmedUrl.isEmpty() && (trimmedUrl.startsWith("redis://") || trimmedUrl.startsWith("rediss://"))) {
+            log.info("Cấu hình Redis Connection Factory qua Cloud REDIS_URL");
+            RedisConfiguration redisConfig = LettuceConnectionFactory.createRedisConfiguration(trimmedUrl);
+            return new LettuceConnectionFactory(redisConfig);
+        }
+
+        String host = (redisHost != null && !redisHost.isBlank()) ? redisHost.trim() : "localhost";
+        int port = redisPort > 0 ? redisPort : 6379;
+        log.info("Cấu hình Redis Connection Factory qua Host:Port ({}:{})", host, port);
+
+        RedisStandaloneConfiguration standaloneConfig = new RedisStandaloneConfiguration(host, port);
+        if (redisPassword != null && !redisPassword.isBlank()) {
+            standaloneConfig.setPassword(RedisPassword.of(redisPassword.trim()));
+        }
+        return new LettuceConnectionFactory(standaloneConfig);
+    }
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory, ObjectMapper objectMapper) {
