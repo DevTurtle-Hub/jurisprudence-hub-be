@@ -7,6 +7,7 @@ public final class SecurityConstants {
 
     // Public endpoints that don't require authentication
     public static final String[] PUBLIC_ENDPOINTS = {
+            "/",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh-token",
