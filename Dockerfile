@@ -26,5 +26,5 @@ EXPOSE 10000
 
 # Production container JVM flags optimized for 512MB RAM environments (Render Free):
 # -XX:+UseSerialGC: minimizes native GC thread memory and overhead on single-core / low RAM
-# Default: 256MB max heap, 96MB metaspace, 256KB stack, leaving ~150MB buffer for OS and native memory
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=96m -Xss256k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Djava.net.preferIPv4Stack=true} -Dserver.port=${PORT:-10000} -Dserver.address=0.0.0.0 -jar app.jar"]
+# Default: 224MB max heap, 160MB metaspace, 256KB stack, leaving ~100MB buffer for OS and native memory
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:--Xms96m -Xmx224m -XX:MaxMetaspaceSize=160m -Xss256k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Djava.net.preferIPv4Stack=true} -Dserver.port=${PORT:-10000} -Dserver.address=0.0.0.0 -jar app.jar"]
