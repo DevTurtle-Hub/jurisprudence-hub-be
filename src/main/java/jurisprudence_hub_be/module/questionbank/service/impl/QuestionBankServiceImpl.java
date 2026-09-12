@@ -27,6 +27,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import jurisprudence_hub_be.common.service.RedisCacheService;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -37,11 +39,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class QuestionBankServiceImpl implements QuestionBankService {
 
+    private static final String QB_CACHE_PREFIX = "question_bank:";
+    private static final Duration QB_TTL = Duration.ofHours(2);
+
     private final QuestionBankRepository questionBankRepository;
     private final QuestionBankMcOptionRepository mcOptionRepository;
     private final QuestionBankEditHistoryRepository editHistoryRepository;
     private final DocumentParserService documentParserService;
     private final ObjectMapper objectMapper;
+    private final RedisCacheService redisCacheService;
 
     @Override
     public List<QuestionBankResponse> parseAndPreviewQuestions(MultipartFile file, String targetType) {
@@ -130,9 +136,18 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         if (id == null || id.isBlank()) {
             throw new ResourceNotFoundException(QuestionBankConstant.MSG_QUESTION_NOT_FOUND + id);
         }
+
+        String cacheKey = QB_CACHE_PREFIX + id.trim();
+        QuestionBankResponse cached = redisCacheService.get(cacheKey, QuestionBankResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
         QuestionBank question = questionBankRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(QuestionBankConstant.MSG_QUESTION_NOT_FOUND + id));
-        return convertEntityToResponse(question);
+        QuestionBankResponse response = convertEntityToResponse(question);
+        redisCacheService.set(cacheKey, response, QB_TTL);
+        return response;
     }
 
     @Override
@@ -176,6 +191,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         }
 
         QuestionBank updated = questionBankRepository.save(existingQuestion);
+        redisCacheService.delete(QB_CACHE_PREFIX + id.trim());
         return convertEntityToResponse(updated);
     }
 
@@ -193,6 +209,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         editHistoryRepository.deleteByQuestionId(id);
 
         questionBankRepository.delete(question);
+        redisCacheService.delete(QB_CACHE_PREFIX + id.trim());
     }
 
     @Override
@@ -209,6 +226,7 @@ public class QuestionBankServiceImpl implements QuestionBankService {
         question.setVerifiedAt(Instant.now());
 
         QuestionBank published = questionBankRepository.save(question);
+        redisCacheService.delete(QB_CACHE_PREFIX + id.trim());
         return convertEntityToResponse(published);
     }
 

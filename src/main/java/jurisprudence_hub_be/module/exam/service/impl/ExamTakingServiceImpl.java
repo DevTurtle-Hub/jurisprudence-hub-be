@@ -12,6 +12,7 @@ import jurisprudence_hub_be.module.exam.entity.ExamRoom;
 import jurisprudence_hub_be.module.exam.repository.ExamQuestionEssayRepository;
 import jurisprudence_hub_be.module.exam.repository.ExamQuestionMcRepository;
 import jurisprudence_hub_be.module.exam.repository.ExamRoomRepository;
+import jurisprudence_hub_be.common.service.RedisCacheService;
 import jurisprudence_hub_be.module.exam.service.CandidateService;
 import jurisprudence_hub_be.module.exam.service.ExamTakingService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 
@@ -27,10 +29,14 @@ import java.util.List;
 @Slf4j
 public class ExamTakingServiceImpl implements ExamTakingService {
 
+    private static final String EXAM_TAKING_CACHE_PREFIX = "exam:taking:room:";
+    private static final Duration EXAM_TAKING_TTL = Duration.ofMinutes(30);
+
     private final ExamRoomRepository examRoomRepository;
     private final ExamQuestionMcRepository examQuestionMcRepository;
     private final ExamQuestionEssayRepository examQuestionEssayRepository;
     private final CandidateService candidateService;
+    private final RedisCacheService redisCacheService;
 
     @Override
     @Transactional(readOnly = true)
@@ -46,6 +52,16 @@ public class ExamTakingServiceImpl implements ExamTakingService {
         // Kiểm tra xem thí sinh có thuộc phòng thi này không (null-safe)
         if (candidate.getRoom() == null || !room.getId().equals(candidate.getRoom().getId())) {
             throw new BadRequestException(ExamConstant.MSG_CANDIDATE_NOT_REGISTERED);
+        }
+
+        return getSanitizedExamPayload(room);
+    }
+
+    private ExamTakingRoomResponse getSanitizedExamPayload(ExamRoom room) {
+        String cacheKey = EXAM_TAKING_CACHE_PREFIX + room.getId();
+        ExamTakingRoomResponse cached = redisCacheService.get(cacheKey, ExamTakingRoomResponse.class);
+        if (cached != null) {
+            return cached;
         }
 
         // 2. Lấy câu hỏi trắc nghiệm và KHỬ HOÀN TOÀN đáp án đúng, giải thích, căn cứ pháp lý
@@ -84,7 +100,7 @@ public class ExamTakingServiceImpl implements ExamTakingService {
                         .build()
         ).toList();
 
-        return ExamTakingRoomResponse.builder()
+        ExamTakingRoomResponse response = ExamTakingRoomResponse.builder()
                 .id(room.getId())
                 .code(room.getCode())
                 .title(room.getTitle())
@@ -93,5 +109,8 @@ public class ExamTakingServiceImpl implements ExamTakingService {
                 .multipleChoiceQuestions(sanitizedMcList)
                 .essayQuestions(sanitizedEssayList)
                 .build();
+
+        redisCacheService.set(cacheKey, response, EXAM_TAKING_TTL);
+        return response;
     }
 }

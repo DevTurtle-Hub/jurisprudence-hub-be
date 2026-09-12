@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jurisprudence_hub_be.common.service.RedisCacheService;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,41 +33,62 @@ import java.util.UUID;
 public class LessonServiceImpl implements LessonService {
 
     private static final Logger log = LoggerFactory.getLogger(LessonServiceImpl.class);
+    private static final String LESSON_DETAIL_CACHE_PREFIX = "lesson:detail:";
+    private static final String LESSON_LIST_CACHE_PREFIX = "lesson:list:";
+    private static final Duration LESSON_TTL = Duration.ofHours(2);
 
     private final LessonRepository lessonRepository;
     private final ChapterRepository chapterRepository;
     private final LessonContentRepository lessonContentRepository;
     private final LessonMapper lessonMapper;
+    private final RedisCacheService redisCacheService;
 
     public LessonServiceImpl(
             LessonRepository lessonRepository,
             ChapterRepository chapterRepository,
             LessonContentRepository lessonContentRepository,
-            LessonMapper lessonMapper
+            LessonMapper lessonMapper,
+            RedisCacheService redisCacheService
     ) {
         this.lessonRepository = lessonRepository;
         this.chapterRepository = chapterRepository;
         this.lessonContentRepository = lessonContentRepository;
         this.lessonMapper = lessonMapper;
+        this.redisCacheService = redisCacheService;
     }
 
     
     @Override
     @Transactional(readOnly = true)
     public List<LessonSummaryResponse> getAllLessons(String chapterId) {
+        String cacheKey = LESSON_LIST_CACHE_PREFIX + (chapterId != null && !chapterId.isBlank() ? chapterId.trim() : "all");
+        @SuppressWarnings("unchecked")
+        List<LessonSummaryResponse> cached = redisCacheService.get(cacheKey, List.class);
+        if (cached != null) {
+            return cached;
+        }
+
         List<Lesson> lessons;
         if (chapterId != null && !chapterId.isBlank()) {
             lessons = lessonRepository.findAllByChapterIdOrderByOrderAsc(chapterId.trim());
         } else {
             lessons = lessonRepository.findAllLessonsOrdered();
         }
-        return lessonMapper.toSummaryResponseList(lessons != null ? lessons : new ArrayList<>());
+        List<LessonSummaryResponse> response = lessonMapper.toSummaryResponseList(lessons != null ? lessons : new ArrayList<>());
+        redisCacheService.set(cacheKey, response, LESSON_TTL);
+        return response;
     }
 
     @Override
     @Transactional(readOnly = true)
     @SuppressWarnings("null")
     public LessonDetailResponse getLessonDetail(String id) {
+        String cacheKey = LESSON_DETAIL_CACHE_PREFIX + (id != null ? id.trim() : "");
+        LessonDetailResponse cached = redisCacheService.get(cacheKey, LessonDetailResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(DocumentConstant.MSG_LESSON_NOT_FOUND + id));
 
@@ -79,7 +102,7 @@ public class LessonServiceImpl implements LessonService {
         String chapterId = lesson.getChapter() != null ? lesson.getChapter().getId() : null;
         String chapterTitle = lesson.getChapter() != null ? lesson.getChapter().getTitle() : null;
 
-        return new LessonDetailResponse(
+        LessonDetailResponse response = new LessonDetailResponse(
                 lesson.getId(),
                 chapterId,
                 chapterTitle,
@@ -88,6 +111,9 @@ public class LessonServiceImpl implements LessonService {
                 contentResponse,
                 navigation
         );
+
+        redisCacheService.set(cacheKey, response, LESSON_TTL);
+        return response;
     }
 
     @Override
@@ -122,6 +148,9 @@ public class LessonServiceImpl implements LessonService {
         Lesson savedLesson = lessonRepository.save(lesson);
         log.info("Created lesson id: {} in chapter: {}", savedLesson.getId(), chapter.getId());
 
+        // Xóa cache danh sách bài học
+        redisCacheService.deletePattern("lesson:*");
+
         return lessonMapper.toSummaryResponse(savedLesson);
     }
 
@@ -155,6 +184,11 @@ public class LessonServiceImpl implements LessonService {
         @SuppressWarnings("null")
         Lesson savedLesson = lessonRepository.save(lesson);
         log.info("Updated lesson id: {}", savedLesson.getId());
+
+        // Invalidate cache chi tiết và danh sách
+        redisCacheService.delete(LESSON_DETAIL_CACHE_PREFIX + id.trim());
+        redisCacheService.deletePattern(LESSON_LIST_CACHE_PREFIX + "*");
+
         return lessonMapper.toSummaryResponse(savedLesson);
     }
 
@@ -165,6 +199,11 @@ public class LessonServiceImpl implements LessonService {
         Lesson lesson = lessonRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(DocumentConstant.MSG_LESSON_NOT_FOUND + id));
         lessonRepository.delete(lesson);
+
+        // Invalidate cache
+        redisCacheService.delete(LESSON_DETAIL_CACHE_PREFIX + id.trim());
+        redisCacheService.deletePattern(LESSON_LIST_CACHE_PREFIX + "*");
+
         log.info("Deleted lesson id: {}", id);
     }
 

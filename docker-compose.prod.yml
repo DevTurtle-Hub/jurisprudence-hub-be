@@ -27,6 +27,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "${HOST_PORT:-8081}:8080"
     environment:
@@ -34,6 +36,9 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jurisprudence_hub}
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       EXAM_HMAC_SECRET: ${EXAM_HMAC_SECRET:?EXAM_HMAC_SECRET is required}
@@ -54,9 +59,27 @@ services:
     networks:
       - jurisprudence-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: jurisprudence-redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - jurisprudence-network
+
 volumes:
   postgres_data:
     name: jurisprudence_postgres_prod_data
+  redis_data:
+    name: jurisprudence_redis_prod_data
 
 networks:
   jurisprudence-network:

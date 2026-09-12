@@ -32,10 +32,12 @@ import jurisprudence_hub_be.module.exam.service.ExamImportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import jurisprudence_hub_be.common.service.RedisCacheService;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,6 +52,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ExamImportServiceImpl implements ExamImportService {
 
     private static final Logger log = LoggerFactory.getLogger(ExamImportServiceImpl.class);
+    private static final String DRAFT_CACHE_PREFIX = "exam:draft:";
+    private static final Duration DRAFT_TTL = Duration.ofHours(24);
 
     private final PdfTextExtractor pdfTextExtractor;
     private final ExamPdfParser examPdfParser;
@@ -58,6 +62,7 @@ public class ExamImportServiceImpl implements ExamImportService {
     private final ExamQuestionMcRepository examQuestionMcRepository;
     private final ExamQuestionMcOptionRepository examQuestionMcOptionRepository;
     private final ExamQuestionEssayRepository examQuestionEssayRepository;
+    private final RedisCacheService redisCacheService;
 
     public ExamImportServiceImpl(PdfTextExtractor pdfTextExtractor,
                                  ExamPdfParser examPdfParser,
@@ -65,7 +70,8 @@ public class ExamImportServiceImpl implements ExamImportService {
                                  ExamRoomRepository examRoomRepository,
                                  ExamQuestionMcRepository examQuestionMcRepository,
                                  ExamQuestionMcOptionRepository examQuestionMcOptionRepository,
-                                 ExamQuestionEssayRepository examQuestionEssayRepository) {
+                                 ExamQuestionEssayRepository examQuestionEssayRepository,
+                                 RedisCacheService redisCacheService) {
         this.pdfTextExtractor = pdfTextExtractor;
         this.examPdfParser = examPdfParser;
         this.draftRepository = draftRepository;
@@ -73,9 +79,10 @@ public class ExamImportServiceImpl implements ExamImportService {
         this.examQuestionMcRepository = examQuestionMcRepository;
         this.examQuestionMcOptionRepository = examQuestionMcOptionRepository;
         this.examQuestionEssayRepository = examQuestionEssayRepository;
+        this.redisCacheService = redisCacheService;
     }
 
-    // Cache trong bộ nhớ phục vụ truy cập nhanh
+    // Cache trong bộ nhớ phục vụ truy cập siêu nhanh L1 song song với Redis L2
     private final Map<String, DraftExamDto> memoryDraftCache = new ConcurrentHashMap<>();
 
     @Override
@@ -102,9 +109,10 @@ public class ExamImportServiceImpl implements ExamImportService {
         try {
             draftRepository.save(draftEntity);
         } catch (Exception e) {
-            log.warn("Không thể lưu draft vào DB (có thể do kết nối), giữ draft trong memory cache: {}", e.getMessage());
+            log.warn("Không thể lưu draft vào DB (có thể do kết nối), giữ draft trong cache: {}", e.getMessage());
         }
         memoryDraftCache.put(draft.getDraftId(), draft);
+        redisCacheService.set(DRAFT_CACHE_PREFIX + draft.getDraftId(), draft, DRAFT_TTL);
 
         // 4. Thống kê preview
         int successCount = 0;
@@ -174,9 +182,10 @@ public class ExamImportServiceImpl implements ExamImportService {
         try {
             draftRepository.save(draftEntity);
         } catch (Exception e) {
-            log.warn("Không thể lưu draft vào DB (có thể do kết nối), giữ draft trong memory cache: {}", e.getMessage());
+            log.warn("Không thể lưu draft vào DB (có thể do kết nối), giữ draft trong cache: {}", e.getMessage());
         }
         memoryDraftCache.put(draftId, draft);
+        redisCacheService.set(DRAFT_CACHE_PREFIX + draftId, draft, DRAFT_TTL);
 
         return ExamImportPreviewResponse.builder()
                 .draftId(draftId)
@@ -200,12 +209,25 @@ public class ExamImportServiceImpl implements ExamImportService {
     @Override
     @Transactional(readOnly = true)
     public DraftExamDto getDraft(String draftId) {
+        // 1. Kiểm tra L1 Memory Cache
         DraftExamDto cached = memoryDraftCache.get(draftId);
         if (cached != null) return cached;
 
-        return draftRepository.findByIdAndStatus(draftId, DraftStatus.DRAFT)
+        // 2. Kiểm tra L2 Redis Cache
+        DraftExamDto redisCached = redisCacheService.get(DRAFT_CACHE_PREFIX + draftId, DraftExamDto.class);
+        if (redisCached != null) {
+            memoryDraftCache.put(draftId, redisCached);
+            return redisCached;
+        }
+
+        // 3. Fallback tìm kiếm trong PostgreSQL Database
+        DraftExamDto dbDraft = draftRepository.findByIdAndStatus(draftId, DraftStatus.DRAFT)
                 .map(ExamImportDraft::getDraftData)
                 .orElseThrow(() -> new ResourceNotFoundException(ExamConstant.MSG_DRAFT_NOT_FOUND + draftId));
+
+        memoryDraftCache.put(draftId, dbDraft);
+        redisCacheService.set(DRAFT_CACHE_PREFIX + draftId, dbDraft, DRAFT_TTL);
+        return dbDraft;
     }
 
     @Override
@@ -549,6 +571,7 @@ public class ExamImportServiceImpl implements ExamImportService {
             draftRepository.save(d);
         });
         memoryDraftCache.remove(draftId);
+        redisCacheService.delete(DRAFT_CACHE_PREFIX + draftId);
 
         log.info("Xác nhận import thành công đề thi [{}] từ draft [{}] gồm {} câu hỏi",
                 savedRoom.getCode(), draftId, draft.getTotalQuestions());
@@ -574,6 +597,7 @@ public class ExamImportServiceImpl implements ExamImportService {
             draftRepository.save(d);
         });
         memoryDraftCache.remove(draftId);
+        redisCacheService.delete(DRAFT_CACHE_PREFIX + draftId);
         log.info("Đã hủy bản nháp đề thi: {}", draftId);
     }
 
@@ -625,6 +649,7 @@ public class ExamImportServiceImpl implements ExamImportService {
 
     private void saveDraft(DraftExamDto draft) {
         memoryDraftCache.put(draft.getDraftId(), draft);
+        redisCacheService.set(DRAFT_CACHE_PREFIX + draft.getDraftId(), draft, DRAFT_TTL);
         draftRepository.findById(draft.getDraftId()).ifPresent(d -> {
             d.setTitle(draft.getTitle());
             d.setTotalQuestions(draft.getTotalQuestions());

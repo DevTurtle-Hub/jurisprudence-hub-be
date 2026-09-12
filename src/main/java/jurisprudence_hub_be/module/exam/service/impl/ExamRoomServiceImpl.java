@@ -17,6 +17,7 @@ import jurisprudence_hub_be.module.exam.entity.ExamRoom;
 import jurisprudence_hub_be.module.exam.enums.ExamRoomStatus;
 import jurisprudence_hub_be.module.exam.repository.CandidateVerificationRepository;
 import jurisprudence_hub_be.module.exam.repository.ExamQuestionEssayRepository;
+import jurisprudence_hub_be.common.service.RedisCacheService;
 import jurisprudence_hub_be.module.exam.repository.ExamQuestionMcOptionRepository;
 import jurisprudence_hub_be.module.exam.repository.ExamQuestionMcRepository;
 import jurisprudence_hub_be.module.exam.repository.ExamRoomRepository;
@@ -31,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,12 +44,17 @@ import java.util.UUID;
 @Slf4j
 public class ExamRoomServiceImpl implements ExamRoomService {
 
+    private static final String EXAM_ROOM_CACHE_PREFIX = "exam:room:";
+    private static final String EXAM_TAKING_CACHE_PREFIX = "exam:taking:room:";
+    private static final Duration EXAM_ROOM_TTL = Duration.ofHours(2);
+
     private final ExamRoomRepository examRoomRepository;
     private final ExamQuestionMcRepository examQuestionMcRepository;
     private final ExamQuestionMcOptionRepository examQuestionMcOptionRepository;
     private final ExamQuestionEssayRepository examQuestionEssayRepository;
     private final ExamSubmissionRepository examSubmissionRepository;
     private final CandidateVerificationRepository candidateVerificationRepository;
+    private final RedisCacheService redisCacheService;
 
     @Override
     @Transactional
@@ -372,7 +379,7 @@ public class ExamRoomServiceImpl implements ExamRoomService {
             ).toList();
         }
 
-        return ExamRoomResponse.builder()
+        ExamRoomResponse response = ExamRoomResponse.builder()
                 .id(savedRoom.getId())
                 .code(savedRoom.getCode())
                 .title(savedRoom.getTitle())
@@ -388,6 +395,15 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                 .multipleChoiceQuestions(mcDetails)
                 .essayQuestions(essayDetails)
                 .build();
+
+        // Xóa cache cũ để đồng bộ dữ liệu mới nhất
+        redisCacheService.delete(EXAM_ROOM_CACHE_PREFIX + savedRoom.getId().toLowerCase());
+        if (savedRoom.getCode() != null) {
+            redisCacheService.delete(EXAM_ROOM_CACHE_PREFIX + savedRoom.getCode().toLowerCase());
+        }
+        redisCacheService.delete(EXAM_TAKING_CACHE_PREFIX + savedRoom.getId());
+
+        return response;
     }
 
     @Override
@@ -412,6 +428,14 @@ public class ExamRoomServiceImpl implements ExamRoomService {
 
         // 4. Xóa phòng thi
         examRoomRepository.delete(room);
+
+        // Xóa cache phòng thi và đề thi thí sinh
+        redisCacheService.delete(EXAM_ROOM_CACHE_PREFIX + roomId.toLowerCase());
+        if (room.getCode() != null) {
+            redisCacheService.delete(EXAM_ROOM_CACHE_PREFIX + room.getCode().toLowerCase());
+        }
+        redisCacheService.delete(EXAM_TAKING_CACHE_PREFIX + roomId);
+
         log.info("Đã xóa hoàn toàn phòng thi '{}' (Mã: {})", room.getTitle(), room.getCode());
     }
 
@@ -474,6 +498,12 @@ public class ExamRoomServiceImpl implements ExamRoomService {
     @Override
     @Transactional(readOnly = true)
     public ExamRoomResponse getRoomDetail(String id) {
+        String cacheKey = EXAM_ROOM_CACHE_PREFIX + (id != null ? id.trim().toLowerCase() : "");
+        ExamRoomResponse cached = redisCacheService.get(cacheKey, ExamRoomResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
         String lookupCode = (id != null) ? id.toUpperCase() : "";
         ExamRoom room = examRoomRepository.findById(id != null ? id : "")
                 .or(() -> examRoomRepository.findByCode(lookupCode))
@@ -516,7 +546,7 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                         .build()
         ).toList();
 
-        return ExamRoomResponse.builder()
+        ExamRoomResponse response = ExamRoomResponse.builder()
                 .id(room.getId())
                 .code(room.getCode())
                 .title(room.getTitle())
@@ -532,5 +562,12 @@ public class ExamRoomServiceImpl implements ExamRoomService {
                 .multipleChoiceQuestions(mcDetails)
                 .essayQuestions(essayDetails)
                 .build();
+
+        redisCacheService.set(cacheKey, response, EXAM_ROOM_TTL);
+        if (room.getCode() != null && !room.getCode().equalsIgnoreCase(id)) {
+            redisCacheService.set(EXAM_ROOM_CACHE_PREFIX + room.getCode().toLowerCase(), response, EXAM_ROOM_TTL);
+        }
+
+        return response;
     }
 }

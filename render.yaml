@@ -25,4 +25,6 @@ services:
         value: "true"
       - key: FLYWAY_CLEAN_DISABLED
         value: "true"
+      - key: REDIS_URL
+        sync: false
 
