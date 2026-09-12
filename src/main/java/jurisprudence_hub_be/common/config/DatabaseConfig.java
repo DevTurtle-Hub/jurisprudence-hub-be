@@ -92,9 +92,11 @@ public class DatabaseConfig {
         config.setDriverClassName(driverClassName);
         config.setMaximumPoolSize(maxPoolSize);
         config.setMinimumIdle(minIdle);
-        config.setConnectionTimeout(30000);
-        config.setIdleTimeout(600000);
-        config.setMaxLifetime(1800000);
+        config.setConnectionTimeout(20000);
+        config.setValidationTimeout(5000);
+        config.setIdleTimeout(300000);
+        config.setMaxLifetime(600000);
+        config.setKeepaliveTime(30000);
         config.setLeakDetectionThreshold(60000);
 
         return new HikariDataSource(config);

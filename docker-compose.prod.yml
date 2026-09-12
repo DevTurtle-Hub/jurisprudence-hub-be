@@ -49,7 +49,7 @@ services:
       APP_ADMIN_UNIT: ${APP_ADMIN_UNIT:-Cục Đào tạo}
       FLYWAY_ENABLED: ${FLYWAY_ENABLED:-true}
       FLYWAY_CLEAN_DISABLED: ${FLYWAY_CLEAN_DISABLED:-true}
-      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx1024m}
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1"]
       interval: 10s

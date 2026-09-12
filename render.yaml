@@ -20,7 +20,7 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         value: "*"
       - key: JAVA_OPTS
-        value: "-Xss512k -XX:MaxMetaspaceSize=128m"
+        value: "-Xms256m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -XX:MaxMetaspaceSize=128m -Xss512k"
       - key: FLYWAY_ENABLED
         value: "true"
       - key: FLYWAY_CLEAN_DISABLED

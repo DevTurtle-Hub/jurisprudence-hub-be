@@ -1,0 +1,28 @@
+name: Render Anti-Sleep Keepalive
+
+on:
+  schedule:
+    # Chạy mỗi 14 phút một lần để ngăn Render Free service rơi vào trạng thái Sleep
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    name: Ping Render Backend Health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Actuator Health
+        run: |
+          TARGET_URL="${{ secrets.RENDER_BACKEND_URL }}"
+          if [ -z "$TARGET_URL" ]; then
+            echo "RENDER_BACKEND_URL secret chưa được cấu hình. Bạn có thể thêm secret RENDER_BACKEND_URL (ví dụ: https://jurisprudence-backend.onrender.com) trong GitHub Repository Settings -> Secrets."
+            exit 0
+          fi
+          echo "Đang ping URL: ${TARGET_URL}/actuator/health"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${TARGET_URL}/actuator/health" || true)
+          echo "Kết quả HTTP status: ${HTTP_STATUS}"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Backend đang hoạt động hoàn hảo và sẵn sàng phục vụ!"
+          else
+            echo "Cảnh báo: HTTP status trả về $HTTP_STATUS (Backend có thể đang thức dậy hoặc gặp sự cố)"
+          fi
