@@ -21,10 +21,10 @@ USER appuser
 
 COPY --from=builder /app/target/jurisprudence-hub-be-0.0.1-SNAPSHOT.jar app.jar
 
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=10000
+EXPOSE 10000
 
 # Production container JVM flags optimized for 512MB RAM environments (Render Free):
 # -XX:+UseSerialGC: minimizes native GC thread memory and overhead on single-core / low RAM
 # Default: 256MB max heap, 96MB metaspace, 256KB stack, leaving ~150MB buffer for OS and native memory
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=96m -Xss256k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError} -Dserver.port=${PORT:-8080} -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=96m -Xss256k -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Djava.net.preferIPv4Stack=true} -Dserver.port=${PORT:-10000} -Dserver.address=0.0.0.0 -jar app.jar"]
